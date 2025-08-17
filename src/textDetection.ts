@@ -1,7 +1,7 @@
 import { getMinionFromInitial } from "./helpers"
 
 /*
-Transcript
+Transcript2
 
 English
 
