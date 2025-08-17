@@ -405,7 +405,7 @@ function App() {
                     textAlign: "center"
                 }}
             >
-                passive be the berries kids
+                Mike is best
             </span>
 
             {settings.displayType === "Numbers" ? (
