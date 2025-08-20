@@ -31,25 +31,6 @@ const reducer = (state: State, action: clearStateAction | addMinionAction): Stat
                 if (lastMinion) {
                     newState.order.push(lastMinion)
 
-                    newState.order.forEach((minion, index) => {
-                        if (index + 1 < newState.order.length) {
-                            minion.audio.onended = () => {
-                                try {
-                                    newState.order[index + 1].audio.play()
-                                } catch {
-                                    console.log("minion death audio error")
-                                }
-                            }
-                        } else {
-                            minion.audio.onended = () => null
-                        }
-                    })
-
-                    try {
-                        newState.order[0].audio.play()
-                    } catch {
-                        console.log("minion death audio error123")
-                    }
                 }
 
                 return newState

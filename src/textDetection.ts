@@ -68,7 +68,7 @@ const confusedCharacters = [
 // Should only be used on text segments as groups e.g [0-9] can be replaced
 // Uses the confusedCharacters to adjust regex string with non-capturing groups to allow for OCR inaccuracies
 const regexAdjustments = (rawRegexString: string) => {
-    console.log("Initial", rawRegexString)
+    // console.log("Initial", rawRegexString)
 
     confusedCharacters.forEach((list) => {
         const replacement = `(?:${list.join("|")})`
@@ -84,7 +84,7 @@ const regexAdjustments = (rawRegexString: string) => {
         })
     })
 
-    console.log("Updated", rawRegexString)
+    // console.log("Updated", rawRegexString)
 
     return rawRegexString
 }
@@ -149,13 +149,15 @@ export const detectPlayerDeath = (text: string) => {
 export const detectKillStart = (text: string) => {
     const translations = [
         `Welcome to your session against: Nex, Angel of Death`,
+        `clear`,
         `Willkommen zu deiner Runde gegen: Nex, Engel des Todes`,
         `Bienvenue dans votre session de combat contre : Nex, l'ange de la mort`
     ]
-
+    console.log("RAW: "+text);
     const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
+console.log("RAW2: "+ mainExpression);
     const match = text.match(new RegExp(`(${mainExpression})`, "i"))
+    console.log("MATCH", match);
 
     return !!match
 }
