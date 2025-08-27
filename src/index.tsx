@@ -5,13 +5,10 @@ import ChatBoxReader from "alt1/chatbox"
 import { createRoot } from "react-dom/client"
 import { displayDetectionMessage, alt1 } from "./helpers"
 import {
-    detectBomb,
-    detectDirectionalSmoke,
     detectKillStart,
     detectGemEnd,
     detectGemStart,
     detectMinionDeath,
-    detectPool,
     detectPlayerDeath,
     detectKillEnd
 } from "./textDetection"
@@ -210,55 +207,6 @@ function App() {
 
                         if (settings.newKillMessage.text) {
                             // displayDetectionMessage("New kill", 5000)
-                        }
-
-                    }
-
-                    // Smoke
-                    const directionalSmoke = detectDirectionalSmoke(line.text)
-                    if (directionalSmoke) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "Smoke",
-                            message: line.text
-                        })
-
-                        if (settings.smokeMessage.text) {
-                            displayDetectionMessage(directionalSmoke, 5000)
-                        }
-
-                    }
-
-                    // Pool
-                    if (detectPool(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "Pool",
-                            message: line.text
-                        })
-
-                        if (settings.poolMessage.text) {
-                            displayDetectionMessage("Pool", 5000)
-
-                            poolReminderSeconds.forEach((secondsUntill) => {
-                                setTimeout(() => {
-                                    displayDetectionMessage(`Pool popping ...${secondsUntill}`, 1000)
-                                }, (secondsForPoolToPop - secondsUntill) * 1000)
-                            })
-                        }
-
-                    }
-
-                    // Bomb
-                    if (detectBomb(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "Bomb",
-                            message: line.text
-                        })
-
-                        if (settings.bombMessage.text) {
-                            displayDetectionMessage("Bomb", 5000)
                         }
 
                     }

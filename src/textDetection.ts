@@ -155,9 +155,9 @@ export const detectKillStart = (text: string) => {
     ]
     console.log("RAW: "+text);
     const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-console.log("RAW2: "+ mainExpression);
+// console.log("RAW2: "+ mainExpression);
     const match = text.match(new RegExp(`(${mainExpression})`, "i"))
-    console.log("MATCH", match);
+    // console.log("MATCH", match);
 
     return !!match
 }
@@ -167,56 +167,11 @@ export const detectMinionDeath = (text: string) => {
 
     const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
 
-    const match = text.match(new RegExp(`(umb|glac|cru|fum).*(${mainExpression})`, "i"))
+    const match = text.match(new RegExp(`(umb|glac|cru|fum|mi).*(${mainExpression})`, "i"))
 
     if (match) {
         const minion = match[0].substring(0, 1)
 
         return getMinionFromInitial(minion)
     }
-}
-
-export const detectDirectionalSmoke = (text: string) => {
-    const match = text.match(
-        new RegExp(
-            `(Nex begins to draw smoke from the (north|east) towards you)|(Nex zieht Rauch aus dem (Norden|Osten) zu dir hin)|(Nex vous envoie de la fumee venant de l'(est) !)|(Nex se met)`,
-            "i"
-        )
-    )
-
-    if (match) {
-        if (text.includes("north") || text.includes("Norden") || text.includes("Nex se met")) {
-            return "North"
-        } else if (text.includes("east") || text.includes("Osten") || text.includes("est")) {
-            return "East"
-        }
-    }
-}
-
-export const detectPool = (text: string) => {
-    const translations = [
-        `Nex casts thick black smoke towards the centre of the arena`,
-        `Nex leitet dichten, schwarzen Rauch zur Mitte der Arena`,
-        `Nex lance une epaisse fumee noire vers le centre de l'arene`
-    ]
-
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(${mainExpression})`, "i"))
-
-    return !!match
-}
-
-export const detectBomb = (text: string) => {
-    const translations = [
-        `Nex has marked you to take the full force of the elements`,
-        `Nex hat dich markiert, um die gesamte Wucht der Elemente abzubekommen`,
-        `Nex vous prend pour cible : vous allez subir toute la puissance des elements`
-    ]
-
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(${mainExpression})`, "i"))
-
-    return !!match
 }

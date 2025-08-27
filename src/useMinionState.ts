@@ -1,6 +1,5 @@
 import { useReducer } from "react"
 import { minion } from "./data"
-import { deduceLastMinion } from "./helpers"
 
 export type State = { allDead: boolean; order: minion[] }
 
@@ -20,27 +19,17 @@ const reducer = (state: State, action: clearStateAction | addMinionAction): Stat
                 allDead: false,
                 order: []
             }
-        case "addMinion":
+        case "addMinion": {
             if (!state.order.includes(action.minion)) {
-                const newState = { ...state }
+                const nextOrder = [...state.order, action.minion];
 
-                newState.order.push(action.minion)
-
-                // Deduce last minion
-                const lastMinion = deduceLastMinion(newState.order)
-                if (lastMinion) {
-                    newState.order.push(lastMinion)
-
-                }
-
-                return newState
+                return { ...state, order: nextOrder }; // NEW ARRAY ✅
             }
 
-            if (state.order.length === 4) {
-                return { ...state, allDead: true }
-            }
+            if (state.order.length === 4) return { ...state, allDead: true };
+            return state;
+        }
 
-            return state
         default:
             throw new Error("Invalid action type")
     }
