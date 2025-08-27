@@ -5,26 +5,17 @@ import ChatBoxReader from "alt1/chatbox"
 import { createRoot } from "react-dom/client"
 import { displayDetectionMessage, alt1 } from "./helpers"
 import {
-    detectBomb,
-    detectDirectionalSmoke,
     detectKillStart,
     detectGemEnd,
     detectGemStart,
     detectMinionDeath,
-    detectPool,
     detectPlayerDeath,
     detectKillEnd
 } from "./textDetection"
-import { east, north, pool, poolPop, bomb, newKill } from "./audio"
 import useMinionState from "./useMinionState"
 import useSettings from "./useSettings"
-import SettingsForm from "./layouts/settingsForm"
 import LettersDisplay from "./layouts/lettersDisplay"
-import NumbersDisplay from "./layouts/numbersDisplay"
 import useEventLogState from "./useEventLogState"
-import Info from "./layouts/info"
-import Log from "./layouts/log"
-import Calculator from "./layouts/calculator"
 
 // Changes made on 5 Nov 2024 with thanks to Jhaego / Frakkefyr
 
@@ -168,7 +159,7 @@ function App() {
                 }
 
                 chatLines.forEach((line) => {
-                    console.log(line)
+                    // console.log(line)
 
                     // Gem start message
                     if (detectGemStart(line.text)) {
@@ -209,81 +200,15 @@ function App() {
 
                     // Start of kill
                     if (detectKillStart(line.text)) {
+                        displayDetectionMessage(line.text, 2500);
+                        console.log("HIYA");
+                        console.log("DEASDA");
                         dispatch({ type: "clear" })
 
                         if (settings.newKillMessage.text) {
-                            displayDetectionMessage("New kill", 5000)
+                            // displayDetectionMessage("New kill", 5000)
                         }
 
-                        if (settings.newKillMessage.volume > 0) {
-                            newKill.play()
-                        }
-                    }
-
-                    // Smoke
-                    const directionalSmoke = detectDirectionalSmoke(line.text)
-                    if (directionalSmoke) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "Smoke",
-                            message: line.text
-                        })
-
-                        if (settings.smokeMessage.text) {
-                            displayDetectionMessage(directionalSmoke, 5000)
-                        }
-
-                        if (settings.smokeMessage.volume > 0) {
-                            if (directionalSmoke === "North") {
-                                north.play()
-                            } else if (directionalSmoke === "East") {
-                                east.play()
-                            }
-                        }
-                    }
-
-                    // Pool
-                    if (detectPool(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "Pool",
-                            message: line.text
-                        })
-
-                        if (settings.poolMessage.text) {
-                            displayDetectionMessage("Pool", 5000)
-
-                            poolReminderSeconds.forEach((secondsUntill) => {
-                                setTimeout(() => {
-                                    displayDetectionMessage(`Pool popping ...${secondsUntill}`, 1000)
-                                }, (secondsForPoolToPop - secondsUntill) * 1000)
-                            })
-                        }
-
-                        if (settings.poolMessage.volume > 0) {
-                            pool.play()
-
-                            setTimeout(() => {
-                                poolPop.play()
-                            }, (secondsForPoolToPop - 4) * 1000)
-                        }
-                    }
-
-                    // Bomb
-                    if (detectBomb(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "Bomb",
-                            message: line.text
-                        })
-
-                        if (settings.bombMessage.text) {
-                            displayDetectionMessage("Bomb", 5000)
-                        }
-
-                        if (settings.bombMessage.volume > 0) {
-                            bomb.play()
-                        }
                     }
 
                     // Minions dying
@@ -303,34 +228,6 @@ function App() {
         return () => clearInterval(tickInterval)
     }, [settings, dispatch, dispatchLog])
 
-    useEffect(() => {
-        if (infoWindow !== null) {
-            ReactDOM.render(<Info />, infoWindow.document.getElementById("root"))
-        }
-
-        if (settingsWindow !== null) {
-            ReactDOM.render(
-                <SettingsForm settings={settings} settingsDispatch={settingsDispatch} />,
-                settingsWindow.document.getElementById("root")
-            )
-        }
-
-        if (logWindow !== null) {
-            ReactDOM.render(
-                <Log
-                    log={log}
-                    clearLog={() => dispatchLog({ type: "clear" })}
-                    removeEvent={(index) => dispatchLog({ type: "removeEvent", index })}
-                />,
-                logWindow.document.getElementById("root")
-            )
-        }
-
-        if (calculatorWindow !== null) {
-            ReactDOM.render(<Calculator />, calculatorWindow.document.getElementById("root"))
-        }
-    })
-
     return (
         <div
             style={{
@@ -344,57 +241,6 @@ function App() {
                 backgroundImage: "url(./background.png)"
             }}
         >
-            <img
-                src="./resources/settings.svg"
-                alt="settings"
-                height={elementSize / 6}
-                width={elementSize / 6}
-                style={{
-                    position: "absolute",
-                    left: elementSize / 32,
-                    top: elementSize / 32
-                }}
-                onClick={showSettings}
-            />
-
-            <img
-                src="./resources/help.svg"
-                alt="settings"
-                height={elementSize / 6}
-                width={elementSize / 6}
-                style={{
-                    position: "absolute",
-                    right: elementSize / 32,
-                    top: (elementSize / 32) * 2
-                }}
-                onClick={showInfo}
-            />
-
-            <img
-                src="./resources/list.svg"
-                alt="kill log"
-                height={elementSize / 6}
-                width={elementSize / 6}
-                style={{
-                    position: "absolute",
-                    left: elementSize / 32,
-                    bottom: elementSize / 32
-                }}
-                onClick={showLog}
-            />
-
-            <img
-                src="./resources/calculator.svg"
-                alt="calculator"
-                height={elementSize / 6}
-                width={elementSize / 6}
-                style={{
-                    position: "absolute",
-                    right: elementSize / 32,
-                    bottom: elementSize / 32
-                }}
-                onClick={showcalculator}
-            />
 
             <span
                 style={{
@@ -405,14 +251,12 @@ function App() {
                     textAlign: "center"
                 }}
             >
-                Mike is best
+                Mikeeeeee
             </span>
 
-            {settings.displayType === "Numbers" ? (
-                <NumbersDisplay windowSize={windowSize} state={state} />
-            ) : (
-                <LettersDisplay windowSize={windowSize} state={state} />
-            )}
+            <LettersDisplay windowSize={windowSize} state={state} />
+
+
         </div>
     )
 }

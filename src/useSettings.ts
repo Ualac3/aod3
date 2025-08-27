@@ -1,5 +1,4 @@
 import { useReducer } from "react"
-import { updateNewKillVolume, updateOrderVolume, updatePoolVolume, updateBombVolume, updateSmokeVolume } from "./audio"
 
 export const messages = {
     newKillMessage: "Start of kill confirmation",
@@ -60,24 +59,12 @@ const reducer = (state: Settings, action: setSettingValue): Settings => {
 
     localStorage.setItem("settings", JSON.stringify(tempState))
 
-    if (action.type === "volume") {
-        updateNewKillVolume(tempState.newKillMessage.volume)
-        updateSmokeVolume(tempState.smokeMessage.volume)
-        updatePoolVolume(tempState.poolMessage.volume)
-        updateBombVolume(tempState.bombMessage.volume)
-        updateOrderVolume(tempState.orderMessage.volume)
-    }
 
     return tempState
 }
 
 const settingsAtBoot: Settings = JSON.parse(localStorage.getItem("settings") || JSON.stringify(defaultSettings))
 
-updateNewKillVolume(settingsAtBoot.newKillMessage.volume)
-updateSmokeVolume(settingsAtBoot.smokeMessage.volume)
-updatePoolVolume(settingsAtBoot.poolMessage.volume)
-updateBombVolume(settingsAtBoot.bombMessage.volume)
-updateOrderVolume(settingsAtBoot.orderMessage.volume)
 
 const useSettings = () => useReducer(reducer, settingsAtBoot)
 

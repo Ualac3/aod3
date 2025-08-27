@@ -30,11 +30,3 @@ export const getMinionFromInitial = (initial: string) => {
 
     return result
 }
-
-export const deduceLastMinion = (order: minion[]) => {
-    const minionsNotIncluded = minionList.filter((minion) => !order.includes(minion))
-
-    if (minionsNotIncluded.length === 1) {
-        return minionsNotIncluded[0]
-    }
-}
