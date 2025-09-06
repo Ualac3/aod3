@@ -20,18 +20,18 @@ export const minions = {
             "Break through the arms",
             "Destroy the arms",
             "The exposed core is certain death",
-        "The best approach is often the simplest",
-    "This might just work!",
-"Do not celebrate yet, it will regrow",
-"Not vital, but damage nonetheless",
-"Well...that'll do it.",
-"Well that'll do it...",
-"Ariane: Excellent.",
-"Ariane: Keep going!",
-"Ariane: Not bad!",
-"Ariane: That's it!",
-"Ariane: This might just work!"
-]
+            "The best approach is often the simplest",
+            "This might just work!",
+            "Do not celebrate yet, it will regrow",
+            "Not vital, but damage nonetheless",
+            "Well...that'll do it.",
+            "Well that'll do it...",
+            "Ariane: Excellent.",
+            "Ariane: Keep going!",
+            "Ariane: Not bad!",
+            "Ariane: That's it!",
+            "Ariane: This might just work!"
+        ]
     },
     Glacies: {
         name: "Glacies",
