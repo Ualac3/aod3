@@ -6,16 +6,14 @@ import { createRoot } from "react-dom/client"
 import { displayDetectionMessage, alt1 } from "./helpers"
 import {
     detectKillStart,
-    detectGemEnd,
-    detectGemStart,
     detectMinionDeath,
-    detectPlayerDeath,
-    detectKillEnd
 } from "./textDetection"
 import useMinionState from "./useMinionState"
 import useSettings from "./useSettings"
 import LettersDisplay from "./layouts/lettersDisplay"
 import useEventLogState from "./useEventLogState"
+import { shouldProcessLine } from "./watermark";
+import { markResetWithCooldown } from "./watermark";
 
 // Changes made on 5 Nov 2024 with thanks to Jhaego / Frakkefyr
 
@@ -45,7 +43,9 @@ const createNewReader = () => {
             mixColor(0, 255, 255), //
             mixColor(255, 0, 0), // Red
             mixColor(255, 255, 255), // White
-            mixColor(127, 169, 255) // Clock blue
+            mixColor(127, 169, 255), // Clock blue
+            mixColor(0, 153, 0), //Ariane
+            mixColor(204, 51, 153) //Azzanadra
         ]
     }
 
@@ -159,44 +159,6 @@ function App() {
                 }
 
                 chatLines.forEach((line) => {
-                    // console.log(line)
-
-                    // Gem start message
-                    if (detectGemStart(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "GemStart",
-                            message: line.text
-                        })
-                    }
-
-                    // Gem end message
-                    if (detectGemEnd(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "GemEnd",
-                            message: line.text
-                        })
-                    }
-
-                    // Kill end message
-                    const result = detectKillEnd(line.text)
-                    if (result !== false) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "KillFinish",
-                            message: line.text
-                        })
-                    }
-
-                    // Player death message
-                    if (detectPlayerDeath(line.text)) {
-                        dispatchLog({
-                            type: "logEvent",
-                            eventType: "PlayerDeath",
-                            message: line.text
-                        })
-                    }
 
                     // Start of kill
                     if (detectKillStart(line.text)) {
@@ -211,10 +173,16 @@ function App() {
 
                     }
 
+                    const minion = detectMinionDeath(line.text);
+                    console.log("[pipeline] detectMinionDeath returned:", minion && `${minion.initial}/${minion.mechanic}`);
                     // Minions dying
-                    const minion = detectMinionDeath(line.text)
-                    if (minion) {
-                        dispatch({ type: "addMinion", minion })
+                    if (shouldProcessLine(line.text)) {
+                        const minion = detectMinionDeath(line.text);
+                        console.log("[pipeline] eligible line, detection returned:", minion && `${minion.initial}/${minion.mechanic}`);
+                        if (minion) dispatch({ type: "addMinion", minion });
+                    } else {
+                        // Optional debug:
+                        // console.log("[pipeline] skipped old line:", line.text);
                     }
                 })
             } catch (error) {
@@ -231,34 +199,42 @@ function App() {
     return (
         <div
             style={{
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                alignItems: "center",
-                minHeight: "100%",
-                minWidth: "100%",
-                backgroundColor: "#04121b",
-                backgroundImage: "url(./background.png)"
+                display: "grid",
+                placeItems: "center",
+                height: "100vh",
+                width: "100vw",
+                background: "transparent", // no big backdrop
             }}
         >
-
-            <span
+            <div
                 style={{
-                    position: "absolute",
-                    bottom: 0,
-                    fontSize: 10,
-                    color: "#D0D0D0",
-                    textAlign: "center"
+                    width: 300,
+                    height: 300,
+                    minWidth: 260,     // tweak to taste
+                    minHeight: 260,
+                    resize: "both",    // 👈 drag bottom/right to resize
+                    overflow: "hidden",
+                    backgroundColor: "#04121b",
+                    backgroundImage: "url(./background.png)",
+                    backgroundSize: "cover",
+                    backgroundPosition: "center",
+                    borderRadius: 8,
+                    border: "1px solid #2b2b2b",
                 }}
             >
-                Mikeeeeee
-            </span>
-
-            <LettersDisplay windowSize={windowSize} state={state} />
-
-
+                <LettersDisplay
+                    windowSize={windowSize}
+                    state={state}
+                    onReset={() => {
+                        dispatch({ type: "clear" });        // your existing reducer clear
+                        markResetWithCooldown(30);          // ⬅️ enforce 30s gap before next cycle can start
+                    }}
+                />
+            </div>
         </div>
-    )
+    );
+
+
 }
 
 const notFound = (
