@@ -1,199 +1,209 @@
-import React from "react"
+import React from "react";
+import { State } from "../useMinionState";
 
-import { State } from "../useMinionState"
+type Props = {
+  windowSize: { height: number; width: number };
+  state: State;
+  onReset?: () => void; // custom callback to clear reducer state between cycles
+};
 
-const lettersDisplay: React.FC<{ windowSize: { height: number; width: number }; state: State }> = ({
-  windowSize,
-  state
-}) => {
+const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
+  const wrapperRef = React.useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = React.useState({ width: 300, height: 300 });
+
+  // Measure the component itself (not the viewport)
+  React.useEffect(() => {
+    if (!wrapperRef.current) return;
+    const el = wrapperRef.current;
+
+    const update = () => {
+      const rect = el.getBoundingClientRect();
+      setSize({ width: rect.width, height: rect.height });
+    };
+
+    update(); // initial
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Typography scaled to the component (works well at 300x300)
+  const minDim = Math.min(size.width, size.height);
+  const buttonFontSize = Math.round(Math.max(14, Math.min(24, minDim * 0.08)));
+  const outputFontSize = Math.round(Math.max(14, Math.min(28, minDim * 0.1)));
+
+  // Mechanics (button labels)
+  const buttons = ["Core", "Cannon", "Flurry", "Minions", "Beams"] as const;
+  type ButtonLabel = (typeof buttons)[number];
+
   const [output, setOutput] = React.useState<string[]>([]);
   const [used, setUsed] = React.useState<Record<string, boolean>>({});
 
-  const fontSize = Math.min(windowSize.width / 8, windowSize.height / 10);
-
-  // Fixed button labels (mechanics)
-  const buttons = ["Core", "Cannon", "Flurry", "Minions", "Beams"] as const;
-  type ButtonLabel = typeof buttons[number];
-
-  // Availability line — still shows initials or ???? like your base did
-  const availability =
-    state.order.length > 0 ? state.order.map((m) => m.initial).join("") : "????";
-
   const handleClick = React.useCallback((label: ButtonLabel) => {
-    console.log("handleClick called with:", label);
     setUsed((u) => {
       if (u[label]) {
-        console.log("Already used:", label);
+        console.log("[LettersDisplay] blocked click (already used):", label);
         return u;
       }
-      setOutput((prev) => {
-        console.log("Adding to output:", label);
-        return [...prev, label];
-      });
+      console.log("[LettersDisplay] click:", label);
+      setOutput((prev) => [...prev, label]);
       return { ...u, [label]: true };
     });
   }, []);
 
-
   const handleReset = React.useCallback(() => {
+    console.log("[LettersDisplay] manual/auto reset");
     setOutput([]);
     setUsed({});
-  }, []);
+    onReset?.(); // also clear reducer state/order
+  }, [onReset]);
 
-  // Auto-click when new minions are pushed into state.order
+  // Auto-click new items in state.order
   const prevLenRef = React.useRef<number>(0);
-
   React.useEffect(() => {
     const prevLen = prevLenRef.current;
     const currLen = state.order.length;
 
-    if (currLen > prevLen) {
-      const newItems = state.order.slice(prevLen);
-      console.log("[New deaths]", newItems.map(m => `${m.initial}:${m.mechanic}`));
+    if (currLen !== prevLen) {
+      console.log(
+        "[LettersDisplay] state.order length change:",
+        prevLen, "→", currLen
+      );
+    }
 
+    if (currLen > prevLen) {
+      console.log(
+        "[LettersDisplay] new items in state.order:",
+        state.order.slice(prevLen).map((x) => x.mechanic)
+      );
+      const newItems = state.order.slice(prevLen, currLen);
       for (const m of newItems) {
         const label = m.mechanic as ButtonLabel;
-        console.log("-> Checking", m.initial, "=>", label, "used?", used[label]);
-        if (label && !used[label]) {
-          console.log("✅ Auto-click", label);
-          handleClick(label);
-        } else {
-          console.log("❌ Skipped", label);
-        }
+        if (label && !used[label]) handleClick(label);
       }
     }
 
     prevLenRef.current = currLen;
-  }, [state.order, used, handleClick]);
+  }, [state.order.length, state.order, used, handleClick]);
 
-  // Auto-reset 15s after the last button is clicked
+  // Auto-reset after all five selected
   React.useEffect(() => {
     if (output.length === buttons.length) {
-      console.log("✅ All buttons clicked, starting 15s reset timer");
-      const timer = setTimeout(() => {
-        console.log("🔄 Auto-reset after 15s");
+      console.log("[LettersDisplay] all 5 selected, scheduling reset");
+      const t = setTimeout(() => {
+        console.log("[LettersDisplay] auto-reset firing now");
         handleReset();
-      }, 1000);
-
-      return () => clearTimeout(timer); // cleanup if reset happens early
+      }, 1_000);
+      return () => clearTimeout(t);
     }
-  }, [output, buttons.length, handleReset]);
+  }, [output, handleReset]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%" }}>
-      {/* Top: two columns */}
-      <div style={{ display: "flex", gap: 24, flex: 1, minHeight: 0 }}>
-        {/* Left column: buttons */}
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "min(280px, 35%)" }}>
-          {buttons.map((label) => {
-            const isUsed = !!used[label];
-            return (
-              <button
-                key={label}
-                onClick={() => handleClick(label)}
-                disabled={isUsed}
-                style={{
-                  cursor: isUsed ? "not-allowed" : "pointer",
-                  border: "1px solid #999",
-                  borderRadius: 12,
-                  padding: "8px 12px",
-                  background: isUsed ? "#000000" : "#1e1e1e",
-                  color: isUsed ? "#555555" : "#E0E0E0",
-                  fontFamily: "sans-serif",
-                  fontSize,
-                  flex: 1,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  opacity: isUsed ? 0.6 : 1
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Right column */}
-        <div
-          style={{
-            flex: 1,
-            borderLeft: "1px solid #444",
-            paddingLeft: 16,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden"
-          }}
-        >
-          {/* Availability line */}
-          <div
-            style={{
-              padding: "12px 0 8px 0",
-              display: "flex",
-              justifyContent: "center",
-              borderBottom: "1px solid #333"
-            }}
-          >
-            <span
+    <div
+      ref={wrapperRef}
+      style={{
+        display: "grid",
+        gridTemplateColumns: "45% 1fr",
+        gridTemplateRows: "1fr auto",
+        gap: 12,
+        height: "100%",
+        width: "100%",
+        padding: 8,
+        boxSizing: "border-box",
+      }}
+    >
+      {/* Left column: mechanics */}
+      <div
+        style={{
+          gridColumn: "1 / 2",
+          gridRow: "1 / 2",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-evenly",
+          alignItems: "stretch",
+          minHeight: 0,
+        }}
+      >
+        {buttons.map((label) => {
+          const isUsed = !!used[label];
+          return (
+            <button
+              key={label}
+              onClick={() => handleClick(label)}
+              disabled={isUsed}
               style={{
-                fontFamily: "monospace",
-                fontSize: Math.min(windowSize.width / 16, windowSize.height / 14),
-                color: "#E0E0E0",
-                letterSpacing: 2
+                width: "100%",
+                cursor: isUsed ? "not-allowed" : "pointer",
+                border: "1px solid #666",
+                borderRadius: 8,
+                background: isUsed ? "#000000" : "#1e1e1e",
+                color: isUsed ? "#888888" : "#E0E0E0",
+                fontFamily: "sans-serif",
+                fontSize: buttonFontSize,
+                lineHeight: 1.1,
+                padding: "6px 10px",
+                boxSizing: "border-box",
               }}
             >
-              {availability}
-            </span>
-          </div>
-
-          {/* Output list */}
-          <div
-            style={{
-              paddingTop: 12,
-              overflowY: "auto",
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: 8,
-              flex: 1
-            }}
-          >
-            {output.length === 0 ? (
-              <h2 style={{ margin: 0, fontFamily: "sans-serif", fontSize: 20, color: "#888" }}>
-                Waiting for picks…
-              </h2>
-            ) : (
-              output.map((val, i) => (
-                <h1
-                  key={`${val}-${i}`}
-                  style={{
-                    margin: 0,
-                    fontFamily: "sans-serif",
-                    fontSize: Math.min(windowSize.width / 12, windowSize.height / 12),
-                    color: "#E0E0E0"
-                  }}
-                >
-                  {val}
-                </h1>
-              ))
-            )}
-          </div>
-        </div>
+              {label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Reset button */}
-      <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+      {/* Right column: output */}
+      <div
+        style={{
+          gridColumn: "2 / 3",
+          gridRow: "1 / 2",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+          overflow: "hidden",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 4,
+          boxSizing: "border-box",
+        }}
+      >
+        {output.map((val, i) => (
+          <h1
+            key={`${val}-${i}`}
+            style={{
+              margin: 0,
+              fontFamily: "sans-serif",
+              fontSize: outputFontSize,
+              color: "#E0E0E0",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {val}
+          </h1>
+        ))}
+      </div>
+
+      {/* Reset row */}
+      <div
+        style={{
+          gridColumn: "1 / -1",
+          gridRow: "2 / 3",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          paddingTop: 6,
+        }}
+      >
         <button
           onClick={handleReset}
           style={{
             cursor: "pointer",
             border: "1px solid #888",
-            borderRadius: 12,
-            padding: "10px 16px",
+            borderRadius: 8,
+            padding: "6px 12px",
             background: "#2a2a2a",
             color: "#ffffff",
             fontFamily: "sans-serif",
-            fontSize: 16
+            fontSize: 14,
           }}
         >
           Reset
@@ -203,4 +213,4 @@ const lettersDisplay: React.FC<{ windowSize: { height: number; width: number }; 
   );
 };
 
-export default lettersDisplay;
+export default LettersDisplay;

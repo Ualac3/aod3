@@ -1,4 +1,5 @@
 import { getMinionFromInitial } from "./helpers"
+import { minions } from "./data"
 
 /*
 Transcript2
@@ -89,62 +90,6 @@ const regexAdjustments = (rawRegexString: string) => {
     return rawRegexString
 }
 
-export const detectGemStart = (text: string) => {
-    const translations = [
-        `The challenge gem competition has begun!`,
-        `Der Rivalit  tsstein-Wettbewerb hat begonnen!`,
-        `La competition de la gemme de defi a commence !`
-    ]
-
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(${mainExpression})`, "i"))
-
-    return !!match
-}
-
-export const detectGemEnd = (text: string) => {
-    const translations = [
-        `Challenge Gem competition results:`,
-        `Ergebnisse des Rivalit  tsstein-Wettbewerbs:`,
-        `Resultats de la competition de la gemme de defi :`
-    ]
-
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(${mainExpression})`, "i"))
-
-    return !!match
-}
-
-export const detectKillEnd = (text: string) => {
-    const translations = [`Completion Time: `, `Abschlusszeit: `, `Temps : `]
-
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(${mainExpression})(([0-9]{2}):([0-9]{2}))`, "i"))
-
-    if (match) {
-        const minutes = parseInt(match[3], 10)
-        const seconds = parseInt(match[4], 10)
-
-        if (!isNaN(minutes) && !isNaN(seconds)) {
-            return minutes * 60 + seconds
-        }
-    }
-
-    return false
-}
-
-export const detectPlayerDeath = (text: string) => {
-    const translations = [`Oh dear, you are dead!`, `Oje, du bist tot!`, `Oh fichtre, vous etes mort !`]
-
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(${mainExpression})`, "i"))
-
-    return !!match
-}
 
 export const detectKillStart = (text: string) => {
     const translations = [
@@ -153,25 +98,68 @@ export const detectKillStart = (text: string) => {
         `Willkommen zu deiner Runde gegen: Nex, Engel des Todes`,
         `Bienvenue dans votre session de combat contre : Nex, l'ange de la mort`
     ]
-    console.log("RAW: "+text);
+    console.log("RAW: " + text);
     const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-// console.log("RAW2: "+ mainExpression);
+    // console.log("RAW2: "+ mainExpression);
     const match = text.match(new RegExp(`(${mainExpression})`, "i"))
     // console.log("MATCH", match);
 
     return !!match
 }
 
+// export const detectMinionDeath = (text: string) => {
+//     const translations = [`master`, `meister`, `ma`]
+
+//     const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
+
+//     const match = text.match(new RegExp(`(umb|glac|cru|fum|mi).*(${mainExpression})`, "i"))
+
+//     if (match) {
+//         const minion = match[0].substring(0, 1)
+
+//         return getMinionFromInitial(minion)
+//     }
+// }
+
+// export const detectMinionDeath = (text: string) => {
+//     const lower = text.toLowerCase();
+//     console.log("LOWER: " + lower);
+
+//     for (const m of Object.values(minions)) {
+//         for (const line of m.textLines) {
+//             const adjustedPattern = regexAdjustments(line.toLowerCase());
+//             const regex = new RegExp(adjustedPattern, "i");
+
+//             // console.log("LINE (adjusted regex): " + adjustedPattern);
+
+//             if (regex.test(lower)) {
+//                 console.log("TRUE");
+//                 return getMinionFromInitial(m.initial); // or m.name / m.initial
+//             }
+//         }
+//     }
+// };
 export const detectMinionDeath = (text: string) => {
-    const translations = [`master`, `meister`, `ma`]
+  const lower = text.toLowerCase();
+  console.log("[detectMinionDeath] INPUT:", lower);
 
-    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
-
-    const match = text.match(new RegExp(`(umb|glac|cru|fum|mi).*(${mainExpression})`, "i"))
-
-    if (match) {
-        const minion = match[0].substring(0, 1)
-
-        return getMinionFromInitial(minion)
+  for (const m of Object.values(minions)) {
+    for (const rawLine of m.textLines) {
+      const adjusted = regexAdjustments(rawLine.toLowerCase());
+      const rx = new RegExp(adjusted, "i");
+      const hit = rx.test(lower);
+      if (hit) {
+        const res = getMinionFromInitial(m.initial);
+        console.log("[detectMinionDeath] MATCH", {
+          initial: m.initial,
+          name: m.name,
+          rawLine,
+          adjusted,
+          resultType: typeof res,
+          result: res,
+        });
+        return res; // <- verify this is the object your pipeline expects
+      }
     }
+  }
 }
