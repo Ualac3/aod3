@@ -1,5 +1,6 @@
 import React from "react";
 import { State } from "../useMinionState";
+import { dbg } from "../logger"; // adjust path
 
 type Props = {
   windowSize: { height: number; width: number };
@@ -42,40 +43,42 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   const handleClick = React.useCallback((label: ButtonLabel) => {
     setUsed((u) => {
       if (u[label]) {
-        console.log("[LettersDisplay] blocked click (already used):", label);
+        dbg("ui/click-BLOCKED", label);
         return u;
       }
-      console.log("[LettersDisplay] click:", label);
+      dbg("ui/click", label);
       setOutput((prev) => [...prev, label]);
       return { ...u, [label]: true };
     });
   }, []);
 
+  React.useEffect(() => {
+    dbg("ui/output", { output });
+  }, [output]);
+
   const handleReset = React.useCallback(() => {
-    console.log("[LettersDisplay] manual/auto reset");
+    dbg("ui/reset");
     setOutput([]);
     setUsed({});
-    onReset?.(); // also clear reducer state/order
+    onReset?.();
   }, [onReset]);
 
-  // Auto-click new items in state.order
-  const prevLenRef = React.useRef<number>(0);
-  React.useEffect(() => {
+  // Auto-click new items in state.order — run synchronously to avoid "next line" lag
+  const prevLenRef = React.useRef(0);
+
+  React.useLayoutEffect(() => {
     const prevLen = prevLenRef.current;
     const currLen = state.order.length;
 
     if (currLen !== prevLen) {
-      console.log(
-        "[LettersDisplay] state.order length change:",
-        prevLen, "→", currLen
-      );
+      dbg("ui/order-change", {
+        prevLen,
+        currLen,
+        newItems: state.order.slice(prevLen).map((x) => x.mechanic),
+      });
     }
 
     if (currLen > prevLen) {
-      console.log(
-        "[LettersDisplay] new items in state.order:",
-        state.order.slice(prevLen).map((x) => x.mechanic)
-      );
       const newItems = state.order.slice(prevLen, currLen);
       for (const m of newItems) {
         const label = m.mechanic as ButtonLabel;
@@ -89,9 +92,9 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   // Auto-reset after all five selected
   React.useEffect(() => {
     if (output.length === buttons.length) {
-      console.log("[LettersDisplay] all 5 selected, scheduling reset");
+      dbg("ui/all-5, scheduling reset");
       const t = setTimeout(() => {
-        console.log("[LettersDisplay] auto-reset firing now");
+        dbg("ui/auto-reset fire");
         handleReset();
       }, 1_000);
       return () => clearTimeout(t);

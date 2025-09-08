@@ -12,8 +12,9 @@ import useMinionState from "./useMinionState"
 import useSettings from "./useSettings"
 import LettersDisplay from "./layouts/lettersDisplay"
 import useEventLogState from "./useEventLogState"
-import { shouldProcessLine } from "./watermark";
 import { markResetWithCooldown } from "./watermark";
+import { dbg, nextSeq } from "./logger";
+import { shouldProcessLineWithReason } from "./watermark";
 
 // Changes made on 5 Nov 2024 with thanks to Jhaego / Frakkefyr
 
@@ -56,6 +57,27 @@ const secondsForPoolToPop = 22
 const poolReminderSeconds = [3, 2, 1]
 
 displayDetectionMessage("Better AOD starting", 5000)
+
+// --- timing & diff helpers (module-scope, persist across ticks) ---
+let __lastProcessedSec = -Infinity;   // newest [HH:MM:SS] we've processed
+let __lastBatchHash = "";             // quick diff of visible chat text
+
+const tsToSec = (text: string): number | null => {
+    const m = text.match(/\[(\d{2}):(\d{2}):(\d{2})\]/);
+    if (!m) return null;
+    const h = +m[1], mi = +m[2], s = +m[3];
+    return h * 3600 + mi * 60 + s;
+};
+
+// tiny stable hash for the whole chat snapshot
+const hash = (s: string) => {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < s.length; i++) {
+        h ^= s.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+    }
+    return (h >>> 0).toString(16);
+};
 
 function App() {
     const [infoWindow, setInfoWindow] = useState<Window | null>(null)
@@ -126,12 +148,11 @@ function App() {
     useEffect(() => {
         const tick = () => {
             try {
-                let chatLines = readerRef.current.read()
+                let chatLines = readerRef.current.read();
 
                 if (chatLines === null) {
-                    console.log("attempting find")
-
-                    const findResult = readerRef.current.find()
+                    // try to relocate the chat box as you already do
+                    const findResult = readerRef.current.find();
 
                     if (readerRef.current.pos) {
                         alt1.overLayRect(
@@ -142,7 +163,7 @@ function App() {
                             readerRef.current.pos.mainbox.rect.height,
                             1000,
                             1
-                        )
+                        );
                     }
 
                     if (findResult === null) {
@@ -150,46 +171,89 @@ function App() {
                             "Can't detect chatbox\nPlease press enter so chatbox is highlighted for detection",
                             600,
                             30
-                        )
-
-                        return
+                        );
+                        return;
                     }
 
-                    chatLines = readerRef.current.read() || []
+                    chatLines = readerRef.current.read() || [];
                 }
 
-                chatLines.forEach((line) => {
+                // --- batch snapshot & change detection ---
+                const batchStr = chatLines.map(l => l.text).join("\n");
+                const batchHash = hash(batchStr);
 
-                    // Start of kill
+                if (batchHash !== __lastBatchHash) {
+                    dbg("scan/change", { count: chatLines.length, hash: batchHash });
+                    __lastBatchHash = batchHash;
+                } else {
+                    // nothing visibly changed; keep it quiet
+                    // dbg("scan/no-change");
+                }
+
+                // Enrich lines with parsed timestamps and sort oldest → newest
+                const enriched = chatLines
+                    .map(l => ({ line: l, sec: tsToSec(l.text) }))
+                    .sort((a, b) => (a.sec ?? Infinity) - (b.sec ?? Infinity));
+
+                // Compute newest timestamp visible in this snapshot (for diagnostics)
+                const newestSec = enriched.reduce((mx, e) => e.sec != null ? Math.max(mx, e.sec) : mx, -Infinity);
+                if (isFinite(newestSec)) {
+                    dbg("scan/visible", { newestSec, lastProcessedSec: __lastProcessedSec, behindBy: newestSec - __lastProcessedSec });
+                }
+
+                // Only process lines strictly newer than what we've already processed.
+                // This removes the "only updates when the next line arrives" symptom if the reader dumps backlogs.
+                const newLines = enriched.filter(e => e.sec != null && e.sec > __lastProcessedSec);
+
+                if (newLines.length === 0) {
+                    return; // nothing new by timestamp; bail
+                }
+
+                dbg("scan/new-lines", newLines.map(e => e.line.text));
+
+                // Process in chronological order so we never backfill out-of-order
+                for (const { line, sec } of newLines) {
+                    // latency: difference between chat's HH:MM:SS and now (helps if you suspect reader lag)
+                    if (sec != null) {
+                        const now = new Date();
+                        const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+                        dbg("latency/line", { lineTs: sec, procTs: nowSec, deltaSec: nowSec - sec });
+                    }
+
+                    // Start-of-kill as you already had
                     if (detectKillStart(line.text)) {
                         displayDetectionMessage(line.text, 2500);
-                        console.log("HIYA");
-                        console.log("DEASDA");
-                        dispatch({ type: "clear" })
-
-                        if (settings.newKillMessage.text) {
-                            // displayDetectionMessage("New kill", 5000)
-                        }
-
+                        dispatch({ type: "clear" });
                     }
 
-                    const minion = detectMinionDeath(line.text);
-                    console.log("[pipeline] detectMinionDeath returned:", minion && `${minion.initial}/${minion.mechanic}`);
-                    // Minions dying
-                    if (shouldProcessLine(line.text)) {
-                        const minion = detectMinionDeath(line.text);
-                        console.log("[pipeline] eligible line, detection returned:", minion && `${minion.initial}/${minion.mechanic}`);
-                        if (minion) dispatch({ type: "addMinion", minion });
-                    } else {
-                        // Optional debug:
-                        // console.log("[pipeline] skipped old line:", line.text);
+                    // Minions (your flow, unchanged)
+                    const evt = nextSeq();
+
+                    // inside your tick loop, before detectMinionDeath:
+const gate = shouldProcessLineWithReason(line.text);
+if (!gate.allow) {
+  dbg("gate/BLOCK", gate);     // { lineTs, lastSeenSec, watermarkSec, cooldownUntilSec, reason }
+  continue;
+}
+
+// only eligible lines reach detection:
+const minion = detectMinionDeath(line.text);
+if (minion) {
+  dbg("pipeline/DETECTED", { add: `${minion.initial}/${minion.mechanic}`, text: line.text });
+  dispatch({ type: "addMinion", minion });
+}
+
+                    // advance the pointer so earlier lines never retrigger
+                    if (sec != null && sec > __lastProcessedSec) {
+                        __lastProcessedSec = sec;
+                        dbg("scan/advance-lastProcessedSec", __lastProcessedSec);
                     }
-                })
+                }
             } catch (error) {
-                console.log(error)
-                displayDetectionMessage("An error has occured", 600)
+                console.log(error);
+                displayDetectionMessage("An error has occured", 600);
             }
-        }
+        };
 
         const tickInterval = setInterval(tick, 600)
 
@@ -227,7 +291,7 @@ function App() {
                     state={state}
                     onReset={() => {
                         dispatch({ type: "clear" });        // your existing reducer clear
-                        markResetWithCooldown(30);          // ⬅️ enforce 30s gap before next cycle can start
+                        markResetWithCooldown(10);          // ⬅️ enforce 30s gap before next cycle can start
                     }}
                 />
             </div>

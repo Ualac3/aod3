@@ -1,4 +1,5 @@
 import { useReducer } from "react";
+import { dbg } from "./logger"; // adjust path
 
 export type State = {
     allDead: boolean;
@@ -17,16 +18,27 @@ const defaultState: State = {
 
 const reducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case "clear":
-      console.log("[reducer] CLEAR called. Resetting state to empty order.");
+    case "clear": {
+      dbg("reducer/CLEAR", { prevLen: state.order.length });
       return { allDead: false, order: [] };
+    }
 
     case "addMinion": {
-      // NO DEDUPE — just append
+      const prevLen = state.order.length;
+      dbg("reducer/ADD", {
+        add: `${action.minion.initial}/${action.minion.mechanic}`,
+        prevLen
+      });
+
       const nextOrder = [...state.order, action.minion];
-      const allDead = nextOrder.length === 5;
-      console.log("[reducer] order after add (mechanics):", nextOrder.map(m => m.mechanic));
-      return { ...state, order: nextOrder, allDead };
+      const nextLen = nextOrder.length;
+
+      dbg("reducer/AFTER", {
+        mechanics: nextOrder.map((x) => x.mechanic),
+        nextLen
+      });
+
+      return { ...state, order: nextOrder, allDead: nextLen === 5 };
     }
 
     default:
