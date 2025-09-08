@@ -15,7 +15,7 @@ export const minions = {
             "Break through its limbs if you must",
             "Get away from its heart",
             "It's a trap",
-            "Nothing can withstand that amouBreasnt",
+            "Nothing can withstand that amount",
             "Smash your way out",
             "Break through the arms",
             "Destroy the arms",
