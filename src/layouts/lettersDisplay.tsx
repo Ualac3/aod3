@@ -15,7 +15,7 @@ type Props = {
 const LATE_START_OFFSET_SEC    = 100;  // 1:40
 const LATE_WINDOW_DURATION_SEC = 10;   // 0:10 (1:40 → 1:50)
 const SOUND_OFFSET_SEC         = 110;  // 1:50
-const BOUNDARY_OFFSET_SEC      = 135;  // 2:10
+ const BOUNDARY_OFFSET_SEC      = 133;  // 2:15 (update comment if you want 2:10 → 130)
 const FINAL_GRACE_SEC          = 0;    // no grace
 const SOUND_NAME: string       = "end"; // /public/resources/end.mp3
 
@@ -26,10 +26,17 @@ const FIRST_MISS_MSG = "WARNING. 1ST MECHANIC";
 /** Policy: 5th mechanic ALWAYS triggers a hard reset (natural). */
 const HARD_RESET_ON_FIFTH = true;
 
+/** ── Independent ping schedule ───────────────────────────────────────
+ * First ping at +2:00, then every +2:30:
+ *  2:00, 4:30, 7:00, 9:30, 12:00, 14:30, 17:00, 19:30
+ */
+const PING_SOUND_NAME = "mechanic"; // /public/resources/mechanic.mp3
+const PING_SCHEDULE_SEC = [120, 270, 420, 570, 720, 870, 1020, 1170];
+
 const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   // ----- Responsive sizing -----
   const wrapperRef = React.useRef<HTMLDivElement | null>(null);
-  const [size, setSize] = React.useState({ width: 300, height: 300 });
+  const [size, setSize] = React.useState({ width: 328, height: 300 });
   React.useEffect(() => {
     if (!wrapperRef.current) return;
     const el = wrapperRef.current;
@@ -43,7 +50,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
     return () => ro.disconnect();
   }, []);
   const minDim = Math.min(size.width, size.height);
-  const buttonFontSize = Math.round(Math.max(14, Math.min(24, minDim * 0.08)));
+  const buttonFontSize = Math.round(Math.max(13, Math.min(20, minDim * 0.07)));
   const outputFontSize = Math.round(Math.max(14, Math.min(28, minDim * 0.1)));
 
   // ----- Mechanics/buttons state -----
@@ -109,6 +116,11 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
 
   // Dodgy flag (persists until end of current cycle; clears on ANY reset)
   const [dodgyActive, setDodgyActive] = React.useState(false);
+
+  // Independent timer state (completely separate from cycles/resets)
+  const [timerActive, setTimerActive] = React.useState(false);
+  const timerStartMsRef = React.useRef<number | null>(null);
+  const timerIdxRef = React.useRef(0);
 
   // Ticker
   const [nowMs, setNowMs] = React.useState<number>(Date.now());
@@ -219,7 +231,9 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
     // Clear ALL in-app sticky banners/flags on ANY reset
     setFirstMissBanner(false);
     setCoreFirstBanner(false);
-    setDodgyActive(false); // << resets Dodgy state (and banner) on any reset
+    setDodgyActive(false);
+
+    // (Intentionally do not touch independent timer here)
 
     // Arm watchdog ONLY for non-manual resets
     if (reason === "timer" || reason === "natural") {
@@ -234,7 +248,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
     onReset?.(reason);
   }, [onReset]);
 
-  // Timer-driven reset at +2:10 (no grace)
+  // Timer-driven reset at boundary
   React.useEffect(() => {
     if (!armedRef.current) return;
     if (firstAnchorMsRef.current == null) return;
@@ -263,10 +277,33 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
     }
   }, [output, hardReset]);
 
-  // Manual Reset button
-  const handleManualReset = React.useCallback(() => {
-    hardReset("manual");
-  }, [hardReset]);
+  // ================== Independent timer logic ==================
+  React.useEffect(() => {
+    if (!timerActive || timerStartMsRef.current == null) return;
+
+    const elapsedSec = (nowMs - timerStartMsRef.current) / 1000;
+
+    // Fire any due pings (while loop handles if the tab lags)
+    while (
+      timerIdxRef.current < PING_SCHEDULE_SEC.length &&
+      elapsedSec >= PING_SCHEDULE_SEC[timerIdxRef.current]
+    ) {
+      const idx = timerIdxRef.current;
+      try {
+        playSound(PING_SOUND_NAME);
+        dbg("pings/play", { idx, atSec: elapsedSec.toFixed(2), targetSec: PING_SCHEDULE_SEC[idx] });
+      } catch (e) {
+        dbg("pings/error", e);
+      }
+      timerIdxRef.current++;
+    }
+
+    // Stop automatically after the last ping
+    if (timerIdxRef.current >= PING_SCHEDULE_SEC.length) {
+      setTimerActive(false);
+      dbg("pings/done");
+    }
+  }, [nowMs, timerActive]);
 
   // ================== UI ==================
   return (
@@ -322,7 +359,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
         })}
       </div>
 
-      {/* Right column: output + sticky banners (unchanged plus Dodgy banner) */}
+      {/* Right column: output + sticky banners */}
       <div
         style={{
           gridColumn: "2 / 3",
@@ -338,7 +375,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
           boxSizing: "border-box",
         }}
       >
-        {/* Sticky orange banner (watchdog) — unchanged */}
+        {/* Sticky orange banner (watchdog) */}
         {firstMissBanner && (
           <div
             style={{
@@ -364,7 +401,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
           </div>
         )}
 
-        {/* Sticky blue banner (Core-first) — unchanged (top-right) */}
+        {/* Sticky blue banner (Core-first) */}
         {coreFirstBanner && (
           <div
             style={{
@@ -390,15 +427,15 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
           </div>
         )}
 
-        {/* Dodgy banner — same vertical level as Core, closer to mechanics (left) */}
+        {/* Dodgy banner — same vertical as Core, closer to mechanics (left) */}
         {dodgyActive && (
           <div
             style={{
               position: "absolute",
-              top: 22,          // same height as Core banner
-              left: 8,          // closer to mechanics column
+              top: 22,
+              left: 8,
               maxWidth: "80%",
-              background: "#ff3b30", // red while active
+              background: "#ff3b30",
               color: "#1a0b0b",
               borderRadius: 10,
               padding: "6px 10px",
@@ -409,7 +446,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
               border: "1px solid rgba(0,0,0,0.25)",
               pointerEvents: "none",
               userSelect: "none",
-              zIndex: 2,        // overlap like Core does
+              zIndex: 2,
             }}
           >
             Dodgy
@@ -433,19 +470,20 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
         ))}
       </div>
 
-      {/* Bottom row: Dodgy (left) + Reset (right column centered) */}
+      {/* Bottom row: all four buttons horizontally */}
       <div
         style={{
-          gridColumn: "1 / 2",
+          gridColumn: "1 / -1",
           gridRow: "2 / 3",
           display: "flex",
-          justifyContent: "flex-start",
           alignItems: "center",
-          paddingTop: 6,
+          justifyContent: "flex-start",
           gap: 8,
+          paddingTop: 6,
+          flexWrap: "nowrap",
         }}
       >
-        {/* Dodgy button — bottom-left under mechanics; blue → red while active */}
+        {/* Dodgy */}
         <button
           onClick={() => {
             if (!dodgyActive) {
@@ -457,32 +495,89 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
           style={{
             border: "1px solid #27466f",
             borderRadius: 8,
-            padding: "6px 12px",
+            padding: "6px 10px",
             background: dodgyActive ? "#ff3b30" : "#2a66b3",
             color: "#ffffff",
             fontFamily: "sans-serif",
-            fontSize: 14,
+            fontSize: 13,
             cursor: dodgyActive ? "not-allowed" : "pointer",
             boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+            whiteSpace: "nowrap",
           }}
           title={dodgyActive ? "Active until reset" : "Mark this cycle as Dodgy"}
         >
           Dodgy
         </button>
-      </div>
 
-      <div
-        style={{
-          gridColumn: "2 / 3",
-          gridRow: "2 / 3",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          paddingTop: 6,
-        }}
-      >
+        {/* Timer (start independent schedule) */}
         <button
-          onClick={handleManualReset}
+          onClick={() => {
+            if (!timerActive) {
+              timerStartMsRef.current = Date.now();
+              timerIdxRef.current = 0;
+              setTimerActive(true);
+              dbg("pings/start", { scheduleSec: PING_SCHEDULE_SEC });
+            }
+          }}
+          disabled={timerActive}
+          style={{
+            border: "1px solid #206b37",
+            borderRadius: 8,
+            padding: "6px 10px",
+            background: timerActive ? "#27ae60" : "#1f7a3a",
+            color: "#ffffff",
+            fontFamily: "sans-serif",
+            fontSize: 13,
+            cursor: timerActive ? "not-allowed" : "pointer",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+            whiteSpace: "nowrap",
+          }}
+          title={
+            timerActive
+              ? "Timer running (2:00, 4:30, 7:00, 9:30, 12:00, 14:30, 17:00, 19:30)"
+              : "Start independent timer"
+          }
+        >
+          Timer
+        </button>
+
+        {/* Cancel (stop & reset independent schedule) */}
+        <button
+          onClick={() => {
+            if (timerActive || timerStartMsRef.current != null || timerIdxRef.current !== 0) {
+              setTimerActive(false);
+              timerStartMsRef.current = null;
+              timerIdxRef.current = 0;
+              dbg("pings/cancel");
+            }
+          }}
+          disabled={!timerActive && timerStartMsRef.current == null && timerIdxRef.current === 0}
+          style={{
+            border: "1px solid #6b2a2a",
+            borderRadius: 8,
+            padding: "6px 10px",
+            background: "#8e2d2d",
+            color: "#ffffff",
+            fontFamily: "sans-serif",
+            fontSize: 13,
+            cursor:
+              !timerActive && timerStartMsRef.current == null && timerIdxRef.current === 0
+                ? "not-allowed"
+                : "pointer",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
+            whiteSpace: "nowrap",
+          }}
+          title="Stop and reset the independent timer"
+        >
+          Cancel
+        </button>
+
+        {/* Reset (cycle manual reset) */}
+        <button
+          onClick={() => {
+            // This is the cycle manual reset; it does not touch the independent timer
+            hardReset("manual");
+          }}
           style={{
             cursor: "pointer",
             border: "1px solid #888",
@@ -491,7 +586,8 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
             background: "#2a2a2a",
             color: "#ffffff",
             fontFamily: "sans-serif",
-            fontSize: 14,
+            fontSize: 13,
+            whiteSpace: "nowrap",
           }}
         >
           Reset

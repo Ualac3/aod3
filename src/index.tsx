@@ -299,9 +299,9 @@ function App() {
   >
     <div
       style={{
-        width: 260,
+        width: 280,
         height: 260,
-        minWidth: 260,
+        minWidth: 280,
         minHeight: 260,
         resize: "both",       // still resizable if you want bigger
         overflow: "hidden",   // no scrollbars
