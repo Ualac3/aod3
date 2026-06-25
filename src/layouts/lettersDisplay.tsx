@@ -19,10 +19,6 @@ const SOUND_OFFSET_SEC         = 110;  // 1:50
 const FINAL_GRACE_SEC          = 0;    // no grace
 const SOUND_NAME: string       = "end"; // /public/resources/end.mp3
 
-/** Watchdog for 1st mechanic miss (non-manual resets only) */
-const FIRST_DETECT_TIMEOUT_SEC = 36;
-const FIRST_MISS_MSG = "WARNING. 1ST MECHANIC";
-
 /** Policy: 5th mechanic ALWAYS triggers a hard reset (natural). */
 const HARD_RESET_ON_FIFTH = true;
 
@@ -106,16 +102,27 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   const firstAnchorMsRef = React.useRef<number | null>(null);
   const armedRef = React.useRef<boolean>(false);
 
-  // Watchdog for missed FIRST
-  const firstWatchDeadlineMsRef = React.useRef<number | null>(null);
-  const firstWatchWarnedRef = React.useRef<boolean>(false);
-  const [firstMissBanner, setFirstMissBanner] = React.useState(false); // sticky orange banner
-
-  // Core-first banner
-  const [coreFirstBanner, setCoreFirstBanner] = React.useState(false);
-
   // Dodgy flag (persists until end of current cycle; clears on ANY reset)
   const [dodgyActive, setDodgyActive] = React.useState(false);
+
+  // ================== NEW: Last reset banner ==================
+  type ResetBannerInfo = { reason: ResetReason; atMs: number };
+  const [lastResetBanner, setLastResetBanner] = React.useState<ResetBannerInfo | null>(null);
+
+  const resetReasonLabel = (reason: ResetReason) => {
+    // Requested examples: "detected" or "manual"
+    if (reason === "natural") return "Detected";
+    if (reason === "manual") return "Manual";
+    return "Timer";
+  };
+
+  const formatTime = (ms: number) => {
+    const d = new Date(ms);
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    const ss = String(d.getSeconds()).padStart(2, "0");
+    return `${hh}:${mm}:${ss}`;
+  };
 
   // Independent timer state (completely separate from cycles/resets)
   const [timerActive, setTimerActive] = React.useState(false);
@@ -152,32 +159,12 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
       setLateShown(false);
       setSoundPlayed(false);
 
-      // Core-first banner
-      setCoreFirstBanner(firstLabel === "Core");
-
-      // FIRST arrived → cancel watchdog (banner stays until reset, as requested)
-      firstWatchDeadlineMsRef.current = null;
-      firstWatchWarnedRef.current = false;
-
       dbg("cycle/FIRST_ANCHORED", { atMs: firstAnchorMsRef.current, firstLabel });
       displayDetectionMessage("Cycle started", 2000); // keep the toast
     }
 
     prevOutputLenForFirstRef.current = curr;
   }, [output.length, output]);
-
-  // Watchdog: arm after non-manual reset; fire sticky orange banner if missed
-  React.useEffect(() => {
-    const deadline = firstWatchDeadlineMsRef.current;
-    if (deadline == null) return;            // not armed
-    if (firstWatchWarnedRef.current) return; // already fired
-
-    if (nowMs >= deadline && firstAnchorMsRef.current == null) {
-      firstWatchWarnedRef.current = true;
-      setFirstMissBanner(true);              // show sticky orange banner
-      dbg("watchdog/first-miss", { timeoutSec: FIRST_DETECT_TIMEOUT_SEC });
-    }
-  }, [nowMs]);
 
   // Pre-final window overlay (Alt1 popup) — 10s before sound
   React.useEffect(() => {
@@ -219,6 +206,10 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   // HARD reset helper — clears timer/UI and all banners; arms watchdog for non-manual
   const hardReset = React.useCallback((reason: ResetReason) => {
     dbg(`ui/hard-reset (${reason})`);
+
+    // NEW: record last reset reason + timestamp for banner
+    setLastResetBanner({ reason, atMs: Date.now() });
+
     // Clear UI
     setOutput([]);
     setUsed({});
@@ -228,22 +219,10 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
     setLateShown(false);
     setSoundPlayed(false);
 
-    // Clear ALL in-app sticky banners/flags on ANY reset
-    setFirstMissBanner(false);
-    setCoreFirstBanner(false);
+    // Clear in-app sticky flags on ANY reset
     setDodgyActive(false);
 
     // (Intentionally do not touch independent timer here)
-
-    // Arm watchdog ONLY for non-manual resets
-    if (reason === "timer" || reason === "natural") {
-      firstWatchWarnedRef.current = false;
-      firstWatchDeadlineMsRef.current = Date.now() + FIRST_DETECT_TIMEOUT_SEC * 1000;
-      dbg("watchdog/armed", { reason, timeoutSec: FIRST_DETECT_TIMEOUT_SEC });
-    } else {
-      firstWatchDeadlineMsRef.current = null;
-      firstWatchWarnedRef.current = false;
-    }
 
     onReset?.(reason);
   }, [onReset]);
@@ -375,8 +354,8 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
           boxSizing: "border-box",
         }}
       >
-        {/* Sticky orange banner (watchdog) */}
-        {firstMissBanner && (
+        {/* Sticky orange banner (last reset reason) */}
+        {lastResetBanner && (
           <div
             style={{
               position: "absolute",
@@ -394,36 +373,15 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
               border: "1px solid rgba(0,0,0,0.25)",
               pointerEvents: "none",
               userSelect: "none",
-              zIndex: 1,
-            }}
-          >
-            {FIRST_MISS_MSG}
-          </div>
-        )}
-
-        {/* Sticky blue banner (Core-first) */}
-        {coreFirstBanner && (
-          <div
-            style={{
-              position: "absolute",
-              top: 22,
-              right: 8,
-              maxWidth: "80%",
-              background: "#4aa3ff",
-              color: "#061e3a",
-              borderRadius: 10,
-              padding: "6px 10px",
-              fontFamily: "sans-serif",
-              fontSize: 12,
-              lineHeight: 1.2,
-              boxShadow: "0 2px 8px rgba(0,0,0,0.35)",
-              border: "1px solid rgba(0,0,0,0.25)",
-              pointerEvents: "none",
-              userSelect: "none",
               zIndex: 2,
             }}
           >
-            Core 1
+            <div style={{ fontWeight: 700 }}>
+              Reset: {resetReasonLabel(lastResetBanner.reason)}
+            </div>
+            <div style={{ opacity: 0.9 }}>
+              {formatTime(lastResetBanner.atMs)}
+            </div>
           </div>
         )}
 
