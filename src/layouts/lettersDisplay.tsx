@@ -50,7 +50,7 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   const outputFontSize = Math.round(Math.max(14, Math.min(28, minDim * 0.1)));
 
   // ----- Mechanics/buttons state -----
-  const buttons = ["Core", "Cannon", "Flurry", "Minions", "Beams"] as const;
+  const buttons = ["Beams", "Cannon", "Core", "Flurry", "Minions"] as const;
   type ButtonLabel = (typeof buttons)[number];
   type Source = "auto" | "manual";
 
