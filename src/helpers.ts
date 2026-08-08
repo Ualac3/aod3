@@ -30,3 +30,21 @@ export const getMinionFromInitial = (initial: string) => {
 
     return result
 }
+
+// helpers.ts
+
+/**
+ * Play a sound from /public/resources.
+ * Example: playSound("Bomb") will try to load /resources/Bomb.mp3
+ */
+export function playSound(name: string) {
+  try {
+    const audio = new Audio(`/resources/${name}.mp3`);
+    audio.volume = 1.0; // adjust 0.0 – 1.0 if you want quieter
+    audio.play().catch((err) => {
+      console.warn("playSound error", err);
+    });
+  } catch (e) {
+    console.warn("playSound setup error", e);
+  }
+}

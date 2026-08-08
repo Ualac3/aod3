@@ -1,17 +1,17 @@
-import React, { useEffect, useRef, useState } from "react"
-import ReactDOM from "react-dom"
-import { mixColor } from "alt1"
-import ChatBoxReader from "alt1/chatbox"
-import { createRoot } from "react-dom/client"
-import { displayDetectionMessage, alt1 } from "./helpers"
+import React, { useEffect, useRef, useState } from "react";
+import ReactDOM from "react-dom";
+import { mixColor } from "alt1";
+import ChatBoxReader from "alt1/chatbox";
+import { createRoot } from "react-dom/client";
+import { displayDetectionMessage, alt1 } from "./helpers";
 import {
-    detectKillStart,
-    detectMinionDeath,
-} from "./textDetection"
-import useMinionState from "./useMinionState"
-import useSettings from "./useSettings"
-import LettersDisplay from "./layouts/lettersDisplay"
-import useEventLogState from "./useEventLogState"
+  detectKillStart,
+  detectMinionDeath,
+} from "./textDetection";
+import useMinionState from "./useMinionState";
+import useSettings from "./useSettings";
+import LettersDisplay from "./layouts/lettersDisplay";
+import useEventLogState from "./useEventLogState";
 import { markResetWithCooldown } from "./watermark";
 import { dbg, nextSeq } from "./logger";
 import { shouldProcessLineWithReason } from "./watermark";
@@ -27,304 +27,334 @@ import { shouldProcessLineWithReason } from "./watermark";
 // https://5tjf8.csb.app/
 
 const createNewReader = () => {
-    const reader = new ChatBoxReader()
+  const reader = new ChatBoxReader();
 
-    reader.readargs = {
-        colors: [
-            mixColor(255, 160, 0), // Orange practice mode
-            mixColor(45, 186, 21), // Completion time green
-            mixColor(45, 184, 20), // Completion time green
-            mixColor(159, 255, 159), // Clan chat green
-            mixColor(255, 82, 86), // PM red
-            mixColor(225, 35, 35), // Nex P3 spec text
-            mixColor(235, 47, 47), // Nex P3 spec text NEW 16/7/24
-            mixColor(153, 255, 153), // "Nex:" green
-            mixColor(155, 48, 255), // "Nex:" purple
-            mixColor(255, 0, 255), //
-            mixColor(0, 255, 255), //
-            mixColor(255, 0, 0), // Red
-            mixColor(255, 255, 255), // White
-            mixColor(127, 169, 255), // Clock blue
-            mixColor(0, 153, 0), //Ariane
-            mixColor(204, 51, 153) //Azzanadra
-        ]
-    }
+  reader.readargs = {
+    colors: [
+      mixColor(255, 160, 0), // Orange practice mode
+      mixColor(45, 186, 21), // Completion time green
+      mixColor(45, 184, 20), // Completion time green
+      mixColor(159, 255, 159), // Clan chat green
+      mixColor(255, 82, 86), // PM red
+      mixColor(225, 35, 35), // Nex P3 spec text
+      mixColor(235, 47, 47), // Nex P3 spec text NEW 16/7/24
+      mixColor(153, 255, 153), // "Nex:" green
+      mixColor(155, 48, 255), // "Nex:" purple
+      mixColor(255, 0, 255), //
+      mixColor(0, 255, 255), //
+      mixColor(255, 0, 0), // Red
+      mixColor(255, 255, 255), // White
+      mixColor(127, 169, 255), // Clock blue
+      mixColor(0, 153, 0), //Ariane
+      mixColor(204, 51, 153) //Azzanadra
+    ]
+  };
 
-    return reader
-}
+  return reader;
+};
 
-const secondsForPoolToPop = 22
-const poolReminderSeconds = [3, 2, 1]
+const MANUAL_COOLDOWN_SEC = 0;   // clicking Reset button
+const TIMER_COOLDOWN_SEC = 0;    // auto boundary reset
+const NATURAL_COOLDOWN_SEC = 22; // 5th-mechanic hard reset
 
-displayDetectionMessage("Better AOD starting", 5000)
+const secondsForPoolToPop = 22;
+const poolReminderSeconds = [3, 2, 1];
 
-// --- timing & diff helpers (module-scope, persist across ticks) ---
-let __lastProcessedSec = -Infinity;   // newest [HH:MM:SS] we've processed
-let __lastBatchHash = "";             // quick diff of visible chat text
+displayDetectionMessage("Better AOD starting", 5000);
 
+// --- timestamp parsing ---
 const tsToSec = (text: string): number | null => {
-    const m = text.match(/\[(\d{2}):(\d{2}):(\d{2})\]/);
-    if (!m) return null;
-    const h = +m[1], mi = +m[2], s = +m[3];
-    return h * 3600 + mi * 60 + s;
+  const m = text.match(/\[(\d{2}):(\d{2}):(\d{2})\]/);
+  if (!m) return null;
+  const h = +m[1], mi = +m[2], s = +m[3];
+  return h * 3600 + mi * 60 + s;
 };
 
-// tiny stable hash for the whole chat snapshot
+// tiny stable hash (FNV-1a)
 const hash = (s: string) => {
-    let h = 2166136261 >>> 0;
-    for (let i = 0; i < s.length; i++) {
-        h ^= s.charCodeAt(i);
-        h = Math.imul(h, 16777619);
-    }
-    return (h >>> 0).toString(16);
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
 };
+
+// --- batch-change detection (optional debug) ---
+let __lastBatchHash = "";
+
+// --- NEW: watermark across ticks ---
+// last fully processed timestamp (seconds since midnight)
+let __lastSec = -Infinity;
+// for that last second, which line contents have we already processed
+let __seenThisSec = new Set<string>();
 
 function App() {
-    const [infoWindow, setInfoWindow] = useState<Window | null>(null)
-    const showInfo = () => {
-        const newWindow = window.open("", "Info", "width=350,height=500")
+  const [infoWindow, setInfoWindow] = useState<Window | null>(null);
+  const showInfo = () => {
+    const newWindow = window.open("", "Info", "width=350,height=500");
+    if (newWindow) {
+      if (newWindow.document.getElementById("root") === null) {
+        newWindow.document.write(`<div id="root" style="height: 100%; width: 100%;"></div>`);
+      }
+      setInfoWindow(newWindow);
+    }
+  };
 
-        if (newWindow) {
-            if (newWindow.document.getElementById("root") === null) {
-                newWindow.document.write(`<div id="root" style="height: 100%; width: 100%;"></div>`)
-            }
+  const [settingsWindow, setSettingsWindow] = useState<Window | null>(null);
+  const showSettings = () => {
+    const newWindow = window.open("", "Settings", "width=350,height=500");
+    if (newWindow) {
+      if (newWindow.document.getElementById("root") === null) {
+        newWindow.document.write(`<div id="root" style="height: 100%; width: 100%"></div>`);
+      }
+      setSettingsWindow(newWindow);
+    }
+  };
 
-            setInfoWindow(newWindow)
+  const [logWindow, setLogWindow] = useState<Window | null>(null);
+  const showLog = () => {
+    const newWindow = window.open("", "Log", "width=350,height=500");
+    if (newWindow) {
+      if (newWindow.document.getElementById("root") === null) {
+        newWindow.document.write(`<div id="root" style="height: 100%; width: 100%"></div>`);
+      }
+      setLogWindow(newWindow);
+    }
+  };
+
+  const [calculatorWindow, setcalculatorWindow] = useState<Window | null>(null);
+  const showcalculator = () => {
+    const newWindow = window.open("", "calculator", "width=350,height=500");
+    if (newWindow) {
+      if (newWindow.document.getElementById("root") === null) {
+        newWindow.document.write(`<div id="root" style="height: 100%; width: 100%"></div>`);
+      }
+      setcalculatorWindow(newWindow);
+    }
+  };
+
+  const readerRef = useRef(createNewReader());
+  const [state, dispatch] = useMinionState();
+  const [log, dispatchLog] = useEventLogState();
+  const [settings, settingsDispatch] = useSettings();
+
+  const [windowSize, setWindowSize] = useState({ height: window.innerHeight, width: window.innerWidth });
+  const [elementSize, setElementSize] = useState(Math.min(window.innerWidth, window.innerHeight));
+
+  window.onresize = () => {
+    setWindowSize({ height: window.innerHeight, width: window.innerWidth });
+    setElementSize(Math.min(window.innerWidth, window.innerHeight));
+  };
+
+  useEffect(() => {
+    const tick = () => {
+      try {
+        let chatLines = readerRef.current.read();
+
+        if (chatLines === null) {
+          // try to relocate the chat box as you already do
+          const findResult = readerRef.current.find();
+
+          if (readerRef.current.pos) {
+            alt1.overLayRect(
+              mixColor(45, 186, 21),
+              readerRef.current.pos.mainbox.rect.x,
+              readerRef.current.pos.mainbox.rect.y,
+              readerRef.current.pos.mainbox.rect.width,
+              readerRef.current.pos.mainbox.rect.height,
+              1000,
+              1
+            );
+          }
+
+          if (findResult === null) {
+            displayDetectionMessage(
+              "Can't detect chatbox\nPlease press enter so chatbox is highlighted for detection",
+              600,
+              30
+            );
+            return;
+          }
+
+          chatLines = readerRef.current.read() || [];
         }
-    }
 
-    const [settingsWindow, setSettingsWindow] = useState<Window | null>(null)
-    const showSettings = () => {
-        const newWindow = window.open("", "Settings", "width=350,height=500")
+        // --- batch snapshot & change detection ---
+        const batchStr = chatLines.map(l => l.text).join("\n");
+        const batchHash = hash(batchStr);
 
-        if (newWindow) {
-            if (newWindow.document.getElementById("root") === null) {
-                newWindow.document.write(`<div id="root" style="height: 100%; width: 100%;"></div>`)
-            }
-
-            setSettingsWindow(newWindow)
+        if (batchHash !== __lastBatchHash) {
+          dbg("scan/change", { count: chatLines.length, hash: batchHash });
+          __lastBatchHash = batchHash;
+        } else {
+          // dbg("scan/no-change");
         }
-    }
 
-    const [logWindow, setLogWindow] = useState<Window | null>(null)
-    const showLog = () => {
-        const newWindow = window.open("", "Log", "width=350,height=500")
+        // Enrich lines with parsed timestamps and sort oldest → newest
+        const enriched = chatLines
+          .map((l, i) => ({ line: l, sec: tsToSec(l.text), idx: i }))
+          .sort((a, b) => (a.sec ?? Infinity) - (b.sec ?? Infinity) || a.idx - b.idx);
 
-        if (newWindow) {
-            if (newWindow.document.getElementById("root") === null) {
-                newWindow.document.write(`<div id="root" style="height: 100%; width: 100%"></div>`)
-            }
-
-            setLogWindow(newWindow)
+        // Compute newest timestamp visible in this snapshot (for diagnostics)
+        const newestSec = enriched.reduce((mx, e) => e.sec != null ? Math.max(mx, e.sec) : mx, -Infinity);
+        if (isFinite(newestSec)) {
+          dbg("scan/visible", { newestSec, lastSec: __lastSec, behindBy: newestSec - __lastSec });
         }
-    }
 
-    const [calculatorWindow, setcalculatorWindow] = useState<Window | null>(null)
-    const showcalculator = () => {
-        const newWindow = window.open("", "calculator", "width=350,height=500")
+        // --- NEW: accept lines newer than watermark, or new content in same second ---
+        const newLines: typeof enriched = [];
+        for (const e of enriched) {
+          if (e.sec == null) continue;
 
-        if (newWindow) {
-            if (newWindow.document.getElementById("root") === null) {
-                newWindow.document.write(`<div id="root" style="height: 100%; width: 100%"></div>`)
-            }
+          if (e.sec > __lastSec) {
+            // moved to a newer second → advance watermark and clear per-second dedupe
+            __lastSec = e.sec;
+            __seenThisSec.clear();
+          } else if (e.sec < __lastSec) {
+            // older than watermark → skip
+            continue;
+          }
+          // here: e.sec === __lastSec (or we just advanced to it)
+          const key = hash(e.line.text); // include color/channel if you want even stronger keys
+          if (__seenThisSec.has(key)) continue;
 
-            setcalculatorWindow(newWindow)
+          __seenThisSec.add(key);
+          newLines.push(e);
         }
-    }
 
-    const readerRef = useRef(createNewReader())
-    const [state, dispatch] = useMinionState()
-    const [log, dispatchLog] = useEventLogState()
-    const [settings, settingsDispatch] = useSettings()
+        if (newLines.length === 0) {
+          return; // nothing new by timestamp/content; bail
+        }
 
-    const [windowSize, setWindowSize] = useState({ height: window.innerHeight, width: window.innerWidth })
-    const [elementSize, setElementSize] = useState(Math.min(window.innerWidth, window.innerHeight))
+        dbg("scan/new-lines", newLines.map(e => e.line.text));
 
-    window.onresize = () => {
-        setWindowSize({ height: window.innerHeight, width: window.innerWidth })
-        setElementSize(Math.min(window.innerWidth, window.innerHeight))
-    }
+        // Process in chronological order so we never backfill out-of-order
+        for (const { line, sec } of newLines) {
+          // latency: difference between chat's HH:MM:SS and now (helps if you suspect reader lag)
+          if (sec != null) {
+            const now = new Date();
+            const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+            dbg("latency/line", { lineTs: sec, procTs: nowSec, deltaSec: nowSec - sec });
+          }
 
-    useEffect(() => {
-        const tick = () => {
-            try {
-                let chatLines = readerRef.current.read();
+          // Start-of-kill as you already had
+          if (detectKillStart(line.text)) {
+            displayDetectionMessage(line.text, 2500);
+            dispatch({ type: "clear" });
+          }
 
-                if (chatLines === null) {
-                    // try to relocate the chat box as you already do
-                    const findResult = readerRef.current.find();
+          // Minions (your flow, unchanged)
+          const evt = nextSeq();
 
-                    if (readerRef.current.pos) {
-                        alt1.overLayRect(
-                            mixColor(45, 186, 21),
-                            readerRef.current.pos.mainbox.rect.x,
-                            readerRef.current.pos.mainbox.rect.y,
-                            readerRef.current.pos.mainbox.rect.width,
-                            readerRef.current.pos.mainbox.rect.height,
-                            1000,
-                            1
-                        );
-                    }
+          // 👇👇👇 ONLY CHANGE: Flurry bypasses the gate
+          // Peek detection once so we can know if it's Flurry without double work.
+          const peek = detectMinionDeath(line.text);
+          const isFlurry = (peek?.mechanic === "Flurry") || /flurry/i.test(line.text);
 
-                    if (findResult === null) {
-                        displayDetectionMessage(
-                            "Can't detect chatbox\nPlease press enter so chatbox is highlighted for detection",
-                            600,
-                            30
-                        );
-                        return;
-                    }
+          // Gate with Flurry bypass
+          const gate = isFlurry
+            ? { allow: true, reason: "flurry-bypass" }
+            : shouldProcessLineWithReason(line.text);
 
-                    chatLines = readerRef.current.read() || [];
-                }
+          if (!gate.allow) {
+            dbg("gate/BLOCK", gate);     // { lineTs, lastSeenSec, watermarkSec, cooldownUntilSec, reason }
+            continue;
+          }
 
-                // --- batch snapshot & change detection ---
-                const batchStr = chatLines.map(l => l.text).join("\n");
-                const batchHash = hash(batchStr);
+           if (isFlurry) {
+            dbg("gate/BYPASS", { text: line.text });
+          }
+          
+          // Only eligible lines reach detection (reuse peek for Flurry)
+          const minion = isFlurry ? peek : detectMinionDeath(line.text);
+          // 👆👆👆 END ONLY CHANGE
 
-                if (batchHash !== __lastBatchHash) {
-                    dbg("scan/change", { count: chatLines.length, hash: batchHash });
-                    __lastBatchHash = batchHash;
-                } else {
-                    // nothing visibly changed; keep it quiet
-                    // dbg("scan/no-change");
-                }
+          if (minion) {
+            dbg("pipeline/DETECTED", { add: `${minion.initial}/${minion.mechanic}`, text: line.text });
+            dispatch({ type: "addMinion", minion });
+          }
 
-                // Enrich lines with parsed timestamps and sort oldest → newest
-                const enriched = chatLines
-                    .map(l => ({ line: l, sec: tsToSec(l.text) }))
-                    .sort((a, b) => (a.sec ?? Infinity) - (b.sec ?? Infinity));
+          // Note: (__lastSec, __seenThisSec) are already advanced above when we admitted the line.
+        }
+      } catch (error) {
+        console.log(error);
+        displayDetectionMessage("An error has occured", 600);
+      }
+    };
 
-                // Compute newest timestamp visible in this snapshot (for diagnostics)
-                const newestSec = enriched.reduce((mx, e) => e.sec != null ? Math.max(mx, e.sec) : mx, -Infinity);
-                if (isFinite(newestSec)) {
-                    dbg("scan/visible", { newestSec, lastProcessedSec: __lastProcessedSec, behindBy: newestSec - __lastProcessedSec });
-                }
+    const tickInterval = setInterval(tick, 600);
+    return () => clearInterval(tickInterval);
+  }, [settings, dispatch, dispatchLog]);
 
-                // Only process lines strictly newer than what we've already processed.
-                // This removes the "only updates when the next line arrives" symptom if the reader dumps backlogs.
-                const newLines = enriched.filter(e => e.sec != null && e.sec > __lastProcessedSec);
+  return (
+  <div
+    style={{
+      display: "grid",
+      placeItems: "center",
+      height: "100vh",
+      width: "100vw",
+      background: "transparent", // no big backdrop
+    }}
+  >
+    <div
+      style={{
+        width: 280,
+        height: 260,
+        minWidth: 280,
+        minHeight: 260,
+        resize: "both",       // still resizable if you want bigger
+        overflow: "hidden",   // no scrollbars
+        backgroundColor: "#04121b",
+        backgroundImage: "url(./background.png)",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        borderRadius: 8,
+        border: "1px solid #2b2b2b",
+        boxSizing: "border-box", // 👈 ensures border doesn’t add to 260px
+      }}
+    >
+      <LettersDisplay
+        windowSize={windowSize}
+        state={state}
+        onReset={(reason?: "manual" | "timer" | "natural") => {
+          dispatch({ type: "clear" });
 
-                if (newLines.length === 0) {
-                    return; // nothing new by timestamp; bail
-                }
+          const cd =
+            reason === "manual" ? MANUAL_COOLDOWN_SEC :
+            reason === "timer"  ? TIMER_COOLDOWN_SEC  :
+                                  NATURAL_COOLDOWN_SEC; // default to natural
 
-                dbg("scan/new-lines", newLines.map(e => e.line.text));
-
-                // Process in chronological order so we never backfill out-of-order
-                for (const { line, sec } of newLines) {
-                    // latency: difference between chat's HH:MM:SS and now (helps if you suspect reader lag)
-                    if (sec != null) {
-                        const now = new Date();
-                        const nowSec = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-                        dbg("latency/line", { lineTs: sec, procTs: nowSec, deltaSec: nowSec - sec });
-                    }
-
-                    // Start-of-kill as you already had
-                    if (detectKillStart(line.text)) {
-                        displayDetectionMessage(line.text, 2500);
-                        dispatch({ type: "clear" });
-                    }
-
-                    // Minions (your flow, unchanged)
-                    const evt = nextSeq();
-
-                    // inside your tick loop, before detectMinionDeath:
-const gate = shouldProcessLineWithReason(line.text);
-if (!gate.allow) {
-  dbg("gate/BLOCK", gate);     // { lineTs, lastSeenSec, watermarkSec, cooldownUntilSec, reason }
-  continue;
-}
-
-// only eligible lines reach detection:
-const minion = detectMinionDeath(line.text);
-if (minion) {
-  dbg("pipeline/DETECTED", { add: `${minion.initial}/${minion.mechanic}`, text: line.text });
-  dispatch({ type: "addMinion", minion });
-}
-
-                    // advance the pointer so earlier lines never retrigger
-                    if (sec != null && sec > __lastProcessedSec) {
-                        __lastProcessedSec = sec;
-                        dbg("scan/advance-lastProcessedSec", __lastProcessedSec);
-                    }
-                }
-            } catch (error) {
-                console.log(error);
-                displayDetectionMessage("An error has occured", 600);
-            }
-        };
-
-        const tickInterval = setInterval(tick, 600)
-
-        return () => clearInterval(tickInterval)
-    }, [settings, dispatch, dispatchLog])
-
-    return (
-        <div
-            style={{
-                display: "grid",
-                placeItems: "center",
-                height: "100vh",
-                width: "100vw",
-                background: "transparent", // no big backdrop
-            }}
-        >
-            <div
-                style={{
-                    width: 300,
-                    height: 300,
-                    minWidth: 260,     // tweak to taste
-                    minHeight: 260,
-                    resize: "both",    // 👈 drag bottom/right to resize
-                    overflow: "hidden",
-                    backgroundColor: "#04121b",
-                    backgroundImage: "url(./background.png)",
-                    backgroundSize: "cover",
-                    backgroundPosition: "center",
-                    borderRadius: 8,
-                    border: "1px solid #2b2b2b",
-                }}
-            >
-                <LettersDisplay
-                    windowSize={windowSize}
-                    state={state}
-                    onReset={() => {
-                        dispatch({ type: "clear" });        // your existing reducer clear
-                        markResetWithCooldown(10);          // ⬅️ enforce 30s gap before next cycle can start
-                    }}
-                />
-            </div>
-        </div>
-    );
-
+          markResetWithCooldown(cd);
+          dbg("reset/applied", { reason, cooldown: cd });
+        }}
+      />
+    </div>
+  </div>
+);
 
 }
 
 const notFound = (
-    <div className="App">
-        <h1>ALT1 not found</h1>
-    </div>
-)
+  <div className="App">
+    <h1>ALT1 not found</h1>
+  </div>
+);
 
-const container = document.getElementById("root")
+const container = document.getElementById("root");
+const root = createRoot(container!);
+root.render(alt1 ? <App /> : notFound);
 
-const root = createRoot(container!)
-root.render(alt1 ? <App /> : notFound)
-
+// Remove CodeSandbox popup
 const clearPopupInterval = setInterval(() => {
-    // Removes the "Open with sandbox button" as it won't scale
-    // Super hate this but no other good options and this is already public
-    // https://github.com/codesandbox/codesandbox-client/issues/3912
-    document.body.querySelectorAll("iframe").forEach((iframe) => {
-        if (iframe.id.startsWith("sb__open-sandbox")) {
-            const node = document.createElement("div")
-            node.style.setProperty("display", "none", "important")
-            node.id = iframe.id
-            document.getElementById(iframe.id)?.remove()
-            document.body.appendChild(node)
-
-            clearInterval(clearPopupInterval)
-        }
-    })
-}, 250)
+  document.body.querySelectorAll("iframe").forEach((iframe) => {
+    if (iframe.id.startsWith("sb__open-sandbox")) {
+      const node = document.createElement("div");
+      node.style.setProperty("display", "none", "important");
+      node.id = iframe.id;
+      document.getElementById(iframe.id)?.remove();
+      document.body.appendChild(node);
+      clearInterval(clearPopupInterval);
+    }
+  });
+}, 250);
