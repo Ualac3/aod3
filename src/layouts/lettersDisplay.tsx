@@ -71,26 +71,36 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
     });
   }, []);
 
-  React.useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const labelMap: Record<string, ButtonLabel> = {
-        F13: "Beams",
-        F14: "Cannon",
-        F15: "Core",
-      };
-      const label = labelMap[event.key] || labelMap[event.code];
-      if (!label) return;
-      event.preventDefault();
-      if (!used[label]) handleClick(label, "manual");
+React.useEffect(() => {
+  const handleKeyDown = (event: KeyboardEvent) => {
+    const labelMap: Record<string, ButtonLabel> = {
+      F13: "Beams",
+      F14: "Cannon",
+      F15: "Core",
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleClick, used]);
+    const label = labelMap[event.key] || labelMap[event.code];
+    if (!label) return;
 
-  React.useEffect(() => {
-    dbg("ui/output", { output });
-  }, [output]);
+    event.preventDefault();
+
+    if (!used[label]) {
+      const previousSource = lastAddSourceRef.current;
+
+      handleClick(label, "manual");
+
+      // Don't let this keyboard-triggered click leave "manual"
+      // as the persistent source.
+      setTimeout(() => {
+        lastAddSourceRef.current = previousSource;
+      }, 0);
+    }
+  };
+
+  window.addEventListener("keydown", handleKeyDown);
+
+  return () => window.removeEventListener("keydown", handleKeyDown);
+}, [handleClick, used]);
 
   // Auto-click items arriving from detection pipeline (SOURCE = "auto")
   const prevLenRef = React.useRef(0);

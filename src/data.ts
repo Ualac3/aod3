@@ -72,7 +72,11 @@ export const minions = {
         initial: "M",
         color: "#FFFFFF",
         mechanic: "Minions",
-        textLines: ["They give their lifeforce to protect", "immune to all damage while there are glacytes", "Kill the minions first", "Focus your efforts on the smaller ones", "Kill the glacytes first"]
+        textLines: ["They give their lifeforce to protect",
+            "immune to all damage while there are glacytes",
+            "Kill the minions first",
+            "Focus your efforts on the smaller ones",
+            "Kill the glacytes first"]
     },
 
 } as const
