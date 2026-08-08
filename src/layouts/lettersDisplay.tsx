@@ -72,6 +72,23 @@ const LettersDisplay: React.FC<Props> = ({ state, onReset }) => {
   }, []);
 
   React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const labelMap: Record<string, ButtonLabel> = {
+        F13: "Beams",
+        F14: "Cannon",
+        F15: "Core",
+      };
+      const label = labelMap[event.key] || labelMap[event.code];
+      if (!label) return;
+      event.preventDefault();
+      if (!used[label]) handleClick(label, "manual");
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleClick, used]);
+
+  React.useEffect(() => {
     dbg("ui/output", { output });
   }, [output]);
 
