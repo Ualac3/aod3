@@ -107,6 +107,17 @@ export const detectKillStart = (text: string) => {
     return !!match
 }
 
+export const detectPlayerDie = (text: string) => {
+    const translations = [
+        `Oh dear, you are dead!`,
+        `Oje, du bist tot!`,
+        `Oh fichtre, vous etes mort!`
+    ]
+    const mainExpression = translations.map((string) => regexAdjustments(string)).join("|")
+    const match = text.match(new RegExp(`(${mainExpression})`, "i"))
+    return !!match
+}
+
 // export const detectMinionDeath = (text: string) => {
 //     const translations = [`master`, `meister`, `ma`]
 
