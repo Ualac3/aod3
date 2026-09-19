@@ -6,6 +6,7 @@ import { createRoot } from "react-dom/client";
 import { displayDetectionMessage, alt1 } from "./helpers";
 import {
   detectKillStart,
+  detectPlayerDie,
   detectMinionDeath,
 } from "./textDetection";
 import useMinionState from "./useMinionState";
@@ -54,7 +55,6 @@ const createNewReader = () => {
 };
 
 const MANUAL_COOLDOWN_SEC = 0;   // clicking Reset button
-const TIMER_COOLDOWN_SEC = 0;    // auto boundary reset
 const NATURAL_COOLDOWN_SEC = 22; // 5th-mechanic hard reset
 
 const secondsForPoolToPop = 22;
@@ -138,6 +138,7 @@ function App() {
   const [state, dispatch] = useMinionState();
   const [log, dispatchLog] = useEventLogState();
   const [settings, settingsDispatch] = useSettings();
+  const [resetCounter, setResetCounter] = useState(0);
 
   const [windowSize, setWindowSize] = useState({ height: window.innerHeight, width: window.innerWidth });
   const [elementSize, setElementSize] = useState(Math.min(window.innerWidth, window.innerHeight));
@@ -244,6 +245,11 @@ function App() {
             dispatch({ type: "clear" });
           }
 
+          // Player death - auto-reset
+          if (detectPlayerDie(line.text)) {
+            setResetCounter(c => c + 1);
+          }
+
           // Minions (your flow, unchanged)
           const evt = nextSeq();
 
@@ -317,13 +323,12 @@ function App() {
       <LettersDisplay
         windowSize={windowSize}
         state={state}
-        onReset={(reason?: "manual" | "timer" | "natural") => {
+        resetCounter={resetCounter}
+        onReset={(reason?: "manual" | "natural") => {
           dispatch({ type: "clear" });
 
           const cd =
-            reason === "manual" ? MANUAL_COOLDOWN_SEC :
-            reason === "timer"  ? TIMER_COOLDOWN_SEC  :
-                                  NATURAL_COOLDOWN_SEC; // default to natural
+            reason === "manual" ? MANUAL_COOLDOWN_SEC : NATURAL_COOLDOWN_SEC;
 
           markResetWithCooldown(cd);
           dbg("reset/applied", { reason, cooldown: cd });
